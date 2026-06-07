@@ -247,7 +247,7 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
     <div class="ltoggle no-key" data-key="fire" title="Requires FIRMS MAP_KEY — see CFG in script">
       <div class="ldot" style="background:#ff5500"></div>
       <span class="llabel">ACTIVE FIRE</span>
-      <span class="lcount" style="font-size:7px;color:#ff5500">KEY REQ</span>
+      <span class="lcount" id="ct-fire">—</span>
     </div>
 
     <div class="pnl-sec" style="margin-top:6px">◆ ENVIRONMENTAL</div>
@@ -914,7 +914,16 @@ async function fetchFires() {
     if (count > 0) {
       LAYERS.fire.g.addTo(map);
       const toggle = document.querySelector('[data-key="fire"]');
-      if (toggle) { toggle.classList.remove('no-key', 'off'); }
+      if (toggle) {
+        toggle.classList.remove('no-key', 'off');
+        toggle.title = '';
+        // Event listener was skipped at init because no-key was present — add it now
+        toggle.addEventListener('click', function() {
+          toggle.classList.toggle('off');
+          if (toggle.classList.contains('off')) map.removeLayer(LAYERS.fire.g);
+          else map.addLayer(LAYERS.fire.g);
+        });
+      }
     }
     setCount('fire', count);
     feedSt('fire', 'ok', 'OK · ' + count);
