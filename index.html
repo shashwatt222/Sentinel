@@ -299,7 +299,7 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
 const CFG = {
   WAQI_KEY: 'demo',      // free: waqi.info/api
   NASA_KEY: '16da9HrhWdHggFpSAkNpZBR4MP7nomRHXrmUtswJ',  // free: api.nasa.gov
-  // FIRMS_KEY: 'xxx',   // free: firms.modaps.eosdis.nasa.gov/api
+  FIRMS_KEY: '22f001bc88906c0f9fbf0dc4a23f8a07',   // free: firms.modaps.eosdis.nasa.gov/api
 };
 
 /* ══ MAP ════════════════════════════════════════ */
@@ -659,12 +659,12 @@ async function fetchWeather() {
 
 /* FIRES — NASA FIRMS VIIRS (requires free MAP_KEY) */
 async function fetchFires() {
-  if (!CFG.FIRMS_KEY) { feedSt('fire', 'err', 'NO KEY'); return; }
+  if (!CFG.) { feedSt('fire', 'err', 'NO KEY'); return; }
   feedSt('fire', 'load', 'CONNECTING');
   try {
     // VIIRS SNPP NRT — India bounding box W,S,E,N — last 1 day
     const url = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/'
-      + CFG.FIRMS_KEY + '/VIIRS_SNPP_NRT/61,6,100,38/1';
+      + CFG. + '/VIIRS_SNPP_NRT/61,6,100,38/1';
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
