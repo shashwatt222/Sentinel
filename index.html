@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINEL — India Threat Monitor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --bg:    #050c12;
+  --panel: rgba(4,10,17,0.93);
+  --b0:    #0b1e2c;
+  --b1:    #132d40;
+  --b2:    #1d4560;
+  --cyan:  #00d4ff;
+  --red:   #ff2d2d;
+  --green: #00e87a;
+  --t0:    #b8dff0;
+  --t1:    #6a9db8;
+  --t2:    #2a4a5c;
+  --font:  'Courier New','Lucida Console',monospace;
+  --pw:    210px;
+  --fw:    262px;
+  --th:    50px;
+  --bh:    44px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:var(--font)}
+button{font-family:var(--font);cursor:pointer;border:none;background:none}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--b2)}
+body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,transparent 0px,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+/* LOADING */
+#loading{position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .7s}
+.ld-logo{font-size:32px;letter-spacing:10px;color:var(--cyan);margin-bottom:6px}
+.ld-sub{font-size:9px;letter-spacing:4px;color:var(--t2);margin-bottom:36px}
+.ld-bar{width:220px;height:1px;background:var(--b1);overflow:hidden;margin-bottom:14px}
+#ld-fill{height:100%;width:0;background:var(--cyan);transition:width .4s}
+#ld-status{font-size:9px;letter-spacing:2px;color:var(--t1);min-height:14px}
+#ld-feeds{margin-top:20px;display:flex;flex-direction:column;gap:5px;width:240px}
+.ldf{display:flex;justify-content:space-between;font-size:8px;letter-spacing:1px}
+.ldf-name{color:var(--t2)}
+.ldf-st{color:var(--t2)}
+.ldf-st.ok{color:var(--green)}
+.ldf-st.err{color:var(--red)}
+.ldf-st.load{color:#ffaa00}
+
+/* MAP */
+#map{position:fixed;inset:0;z-index:1}
+
+/* TOP BAR */
+#topbar{position:fixed;top:0;left:0;right:0;height:var(--th);z-index:500;
+  background:var(--panel);border-bottom:1px solid var(--b2);backdrop-filter:blur(14px);
+  display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+#brand-name{font-size:17px;letter-spacing:5px;color:var(--cyan);margin-right:10px}
+#brand-sub{font-size:8px;letter-spacing:2px;color:var(--t2)}
+#mode-nav{display:flex;gap:2px}
+.mode-btn{font-size:9px;letter-spacing:2px;padding:4px 14px;color:var(--t2);
+  border:1px solid var(--b1);transition:all .18s}
+.mode-btn:hover{color:var(--cyan);border-color:var(--b2)}
+.mode-btn.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.07)}
+#clock-wrap{text-align:right}
+#clock{font-size:14px;color:var(--t0);letter-spacing:1px}
+#clock-tz{font-size:8px;letter-spacing:2px;color:var(--t2);margin-top:1px}
+
+/* LEFT PANEL */
+#left-panel{position:fixed;top:var(--th);left:0;width:var(--pw);
+  height:calc(100vh - var(--th) - var(--bh));background:var(--panel);
+  border-right:1px solid var(--b2);backdrop-filter:blur(14px);z-index:400;
+  display:flex;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+#left-panel.collapsed{transform:translateX(calc(-100% + 28px))}
+#left-content{flex:1;overflow-y:auto;padding:10px 0;min-width:0}
+
+/* RIGHT PANEL */
+#right-panel{position:fixed;top:var(--th);right:0;width:var(--fw);
+  height:calc(100vh - var(--th) - var(--bh));background:var(--panel);
+  border-left:1px solid var(--b2);backdrop-filter:blur(14px);z-index:400;
+  display:flex;flex-direction:row-reverse;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+#right-panel.collapsed{transform:translateX(calc(100% - 28px))}
+#right-content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* COLLAPSER */
+.collapser{width:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  color:var(--t2);font-size:9px;border-left:1px solid var(--b1);transition:color .2s,background .2s}
+.collapser:hover{color:var(--cyan);background:rgba(0,212,255,.05)}
+#right-panel .collapser{border-left:none;border-right:1px solid var(--b1)}
+
+/* PANEL INTERNALS */
+.pnl-sec{font-size:7px;letter-spacing:3px;color:var(--t2);padding:10px 12px 5px}
+.ltoggle{display:flex;align-items:center;gap:8px;padding:6px 12px;
+  cursor:pointer;transition:background .15s;user-select:none}
+.ltoggle:hover{background:rgba(0,212,255,.04)}
+.ltoggle.off{opacity:.35}
+.ltoggle.no-key{opacity:.22;cursor:not-allowed}
+.ldot{width:8px;height:8px;border-radius:50%;flex-shrink:0;position:relative}
+.ldot.pulse::after{content:'';position:absolute;inset:-3px;border-radius:50%;
+  border:1px solid currentColor;animation:ripple 2.2s ease-out infinite;opacity:0}
+@keyframes ripple{0%{transform:scale(.8);opacity:.7}100%{transform:scale(2.2);opacity:0}}
+.llabel{font-size:9px;letter-spacing:1px;color:var(--t0);flex:1}
+.lcount{font-size:8px;color:var(--t2);min-width:20px;text-align:right}
+
+/* FEED */
+#feed-header{display:flex;align-items:center;gap:7px;padding:10px 12px 8px;
+  border-bottom:1px solid var(--b0);font-size:8px;letter-spacing:3px;color:var(--t2);flex-shrink:0}
+.blink-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+#alert-total{margin-left:auto;color:var(--t1)}
+#feed{overflow-y:auto;flex:1}
+.feed-item{padding:9px 12px;border-bottom:1px solid var(--b0);cursor:pointer;transition:background .15s}
+.feed-item:hover{background:rgba(0,212,255,.035)}
+.fi-top{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.fi-badge{font-size:7px;letter-spacing:1px;padding:2px 5px;border-radius:2px;white-space:nowrap}
+.fi-sev{font-size:7px;margin-left:auto;letter-spacing:1px}
+.fi-loc{font-size:10px;color:var(--t0);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fi-det{font-size:8px;color:var(--t1);line-height:1.4}
+.fi-time{font-size:7px;color:var(--t2);margin-top:3px}
+
+/* BOTTOM BAR */
+#bottombar{position:fixed;bottom:0;left:0;right:0;height:var(--bh);background:var(--panel);
+  border-top:1px solid var(--b2);backdrop-filter:blur(14px);z-index:500;display:flex;align-items:center}
+.sw-cell{display:flex;flex-direction:column;justify-content:center;
+  padding:0 18px;border-right:1px solid var(--b0);height:100%;flex-shrink:0}
+.sw-label{font-size:7px;letter-spacing:2px;color:var(--t2);margin-bottom:2px}
+.sw-val{font-size:16px;color:var(--cyan);font-weight:bold;letter-spacing:1px}
+.sw-desc{font-size:8px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+#ticker-wrap{flex:1;overflow:hidden;height:100%;display:flex;align-items:center;padding:0 14px}
+#ticker{white-space:nowrap;font-size:8px;color:var(--t1);letter-spacing:.5px;
+  animation:scroll-ticker 70s linear infinite}
+@keyframes scroll-ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
+
+/* LEAFLET OVERRIDES */
+.leaflet-control-attribution{display:none !important}
+.leaflet-control-zoom{border:1px solid var(--b2) !important}
+.leaflet-control-zoom a{background:var(--panel) !important;color:var(--t1) !important;border-bottom:1px solid var(--b1) !important}
+.leaflet-control-zoom a:hover{color:var(--cyan) !important}
+.leaflet-popup-content-wrapper{background:rgba(4,10,18,.97) !important;border:1px solid var(--b2) !important;
+  border-radius:3px !important;color:var(--t1) !important;font-family:var(--font) !important;
+  padding:0 !important;box-shadow:0 0 28px rgba(0,100,160,.25) !important}
+.leaflet-popup-content{margin:0 !important;font-family:var(--font) !important}
+.leaflet-popup-tip{background:var(--b2) !important}
+.leaflet-popup-close-button{color:var(--t2) !important;padding:6px 8px !important}
+.pu-head{padding:7px 11px;border-bottom:1px solid var(--b0);display:flex;align-items:center;gap:8px}
+.pu-type{font-size:7px;letter-spacing:2px}
+.pu-mode{font-size:7px;color:var(--t2);margin-left:auto;letter-spacing:1px}
+.pu-body{padding:9px 11px}
+.pu-title{font-size:12px;color:var(--t0);margin-bottom:7px;line-height:1.35}
+.pu-row{display:flex;justify-content:space-between;align-items:center;font-size:8px;
+  padding:3px 0;border-bottom:1px solid var(--b0);gap:12px}
+.pu-row:last-child{border-bottom:none}
+.pu-key{color:var(--t2);letter-spacing:1px;white-space:nowrap}
+.pu-val{color:var(--t0);font-weight:bold;text-align:right}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="ld-logo">SENTINEL</div>
+  <div class="ld-sub">INDIA // CIVILIAN THREAT MONITOR</div>
+  <div class="ld-bar"><div id="ld-fill"></div></div>
+  <div id="ld-status">INITIALIZING SYSTEMS...</div>
+  <div id="ld-feeds">
+    <div class="ldf"><span class="ldf-name">SEISMIC (USGS)</span><span class="ldf-st load" id="fs-eq">CONNECTING</span></div>
+    <div class="ldf"><span class="ldf-name">ATMOSPHERE + AQI (OPEN-METEO)</span><span class="ldf-st load" id="fs-wx">CONNECTING</span></div>
+    <div class="ldf"><span class="ldf-name">AIR QUALITY INDEX</span><span class="ldf-st load" id="fs-aqi">WITH ATMOSPHERE</span></div>
+    <div class="ldf"><span class="ldf-name">SPACE WEATHER (NASA/NOAA)</span><span class="ldf-st load" id="fs-space">CONNECTING</span></div>
+    <div class="ldf"><span class="ldf-name">DISASTERS (GDACS)</span><span class="ldf-st load" id="fs-gdacs">CONNECTING</span></div>
+    <div class="ldf"><span class="ldf-name">HEALTH (WHO)</span><span class="ldf-st load" id="fs-who">CONNECTING</span></div>
+  </div>
+</div>
+
+<!-- FILE:// WARNING BANNER -->
+<div id="file-warn" style="display:none;position:fixed;top:50px;left:50%;transform:translateX(-50%);
+  z-index:800;background:#1a0a00;border:1px solid #ffaa00;color:#ffaa00;
+  font-family:'Courier New',monospace;font-size:9px;letter-spacing:1.5px;
+  padding:10px 18px;text-align:center;line-height:1.8;max-width:500px">
+  ⚠ RUNNING FROM FILE:// — API DATA BLOCKED BY BROWSER<br>
+  <span style="color:#6a9db8">Run a local server to enable all feeds:</span><br>
+  <span style="color:#b8dff0">python3 -m http.server 8080</span>
+  <span style="color:#6a9db8"> then open </span>
+  <span style="color:#b8dff0">localhost:8080/sentinel.html</span>
+</div>
+
+<header id="topbar">
+  <div>
+    <span id="brand-name">SENTINEL</span>
+    <span id="brand-sub">INDIA // CIVILIAN THREAT MONITOR</span>
+  </div>
+  <nav id="mode-nav">
+    <button class="mode-btn active" data-mode="all">ALL</button>
+    <button class="mode-btn" data-mode="acute">ACUTE</button>
+    <button class="mode-btn" data-mode="forecast">FORECAST</button>
+    <button class="mode-btn" data-mode="chronic">CHRONIC</button>
+  </nav>
+  <div id="clock-wrap">
+    <div id="clock">--:--:--</div>
+    <div id="clock-tz">IST · UTC+5:30</div>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<!-- LEFT PANEL -->
+<aside id="left-panel">
+  <div id="left-content">
+    <div class="pnl-sec">◆ ACUTE THREATS</div>
+    <div class="ltoggle" data-key="earthquake" data-mode="acute">
+      <div class="ldot pulse" style="background:#ffcc00;color:#ffcc00"></div>
+      <span class="llabel">SEISMIC</span>
+      <span class="lcount" id="ct-earthquake">—</span>
+    </div>
+    <div class="ltoggle" data-key="disaster" data-mode="acute">
+      <div class="ldot pulse" style="background:#00aaff;color:#00aaff"></div>
+      <span class="llabel">CYCLONE / FLOOD</span>
+      <span class="lcount" id="ct-disaster">—</span>
+    </div>
+    <div class="ltoggle" data-key="health" data-mode="acute">
+      <div class="ldot pulse" style="background:#00e87a;color:#00e87a"></div>
+      <span class="llabel">OUTBREAK / HEALTH</span>
+      <span class="lcount" id="ct-health">—</span>
+    </div>
+    <div class="ltoggle no-key" title="Requires FIRMS MAP_KEY — see CFG in script">
+      <div class="ldot" style="background:#ff5500"></div>
+      <span class="llabel">ACTIVE FIRE</span>
+      <span class="lcount" style="font-size:7px;color:#ff5500">KEY REQ</span>
+    </div>
+
+    <div class="pnl-sec" style="margin-top:6px">◆ ENVIRONMENTAL</div>
+    <div class="ltoggle off" data-key="aqi" data-mode="chronic">
+      <div class="ldot" style="background:#cc44ff"></div>
+      <span class="llabel">AIR QUALITY</span>
+      <span class="lcount" id="ct-aqi">—</span>
+    </div>
+    <div class="ltoggle off" data-key="heat" data-mode="chronic">
+      <div class="ldot" style="background:#ff6633"></div>
+      <span class="llabel">HEAT / WET BULB</span>
+      <span class="lcount" id="ct-heat">—</span>
+    </div>
+    <div class="ltoggle off" data-key="uv" data-mode="forecast">
+      <div class="ldot" style="background:#ffee00"></div>
+      <span class="llabel">UV INDEX</span>
+      <span class="lcount" id="ct-uv">—</span>
+    </div>
+    <div class="ltoggle off" data-key="dust" data-mode="forecast">
+      <div class="ldot" style="background:#c8a060"></div>
+      <span class="llabel">DUST / SANDSTORM</span>
+      <span class="lcount" id="ct-dust">—</span>
+    </div>
+
+    <div class="pnl-sec" style="margin-top:6px">◆ SPACE WEATHER</div>
+    <div class="ltoggle off" data-key="space" data-mode="chronic">
+      <div class="ldot" style="background:#ff3fa0"></div>
+      <span class="llabel">SOLAR / GEOMAG</span>
+      <span class="lcount" id="ct-space">—</span>
+    </div>
+  </div>
+  <button class="collapser" id="left-collapser">◀</button>
+</aside>
+
+<!-- RIGHT PANEL -->
+<aside id="right-panel">
+  <button class="collapser" id="right-collapser">▶</button>
+  <div id="right-content">
+    <div id="feed-header">
+      <span class="blink-dot"></span>
+      ACTIVE ALERTS
+      <span id="alert-total" style="margin-left:auto">0</span>
+    </div>
+    <div id="feed"></div>
+  </div>
+</aside>
+
+<!-- BOTTOM BAR -->
+<footer id="bottombar">
+  <div class="sw-cell">
+    <div class="sw-label">SOLAR FLARE</div>
+    <div class="sw-val" id="sw-flare">--</div>
+  </div>
+  <div class="sw-cell">
+    <div class="sw-label">KP INDEX</div>
+    <div class="sw-val" id="sw-kp">--</div>
+  </div>
+  <div class="sw-cell" style="flex:0 0 auto">
+    <div class="sw-label">GEOMAGNETIC STATUS</div>
+    <div class="sw-desc" id="sw-kp-desc">Connecting to NOAA SWPC...</div>
+  </div>
+  <div id="ticker-wrap">
+    <div id="ticker">SENTINEL — CONNECTING TO DATA FEEDS — INDIA CIVILIAN THREAT MONITOR</div>
+  </div>
+</footer>
+
+<script>
+'use strict';
+
+/* ══ CONFIG — replace keys here when you have them ══ */
+const CFG = {
+  WAQI_KEY: 'demo',      // free: waqi.info/api
+  NASA_KEY: 'DEMO_KEY',  // free: api.nasa.gov
+  // FIRMS_KEY: 'xxx',   // free: firms.modaps.eosdis.nasa.gov/api
+};
+
+/* ══ MAP ════════════════════════════════════════ */
+const map = L.map('map', {
+  center: [22, 80], zoom: 5,
+  minZoom: 5, maxZoom: 14,
+  zoomControl: false, attributionControl: false,
+  maxBounds: L.latLngBounds([[2, 52], [40, 102]]),
+  maxBoundsViscosity: 1.0,
+});
+// Fit to India proper — works correctly on any screen size
+map.fitBounds([[6, 68], [37, 97]]);
+// ESRI World Dark Gray Canvas — reliable, free, no API key
+const tileLayer = L.tileLayer(
+  'https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 16, attribution: '' }
+);
+tileLayer.addTo(map);
+// If ESRI fails, fall back to OSM with dark CSS filter
+let tileErrCount = 0;
+tileLayer.on('tileerror', function() {
+  tileErrCount++;
+  if (tileErrCount === 4) {
+    map.removeLayer(tileLayer);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '' }).addTo(map);
+    const s = document.createElement('style');
+    s.textContent = '.leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) saturate(.35) brightness(.7)}';
+    document.head.appendChild(s);
+  }
+});
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+/* ══ LAYER GROUPS ═══════════════════════════════ */
+const LAYERS = {
+  earthquake: { g: L.layerGroup(), critical: true,  mode: 'acute' },
+  disaster:   { g: L.layerGroup(), critical: true,  mode: 'acute' },
+  health:     { g: L.layerGroup(), critical: true,  mode: 'acute' },
+  aqi:        { g: L.layerGroup(), critical: false, mode: 'chronic' },
+  heat:       { g: L.layerGroup(), critical: false, mode: 'chronic' },
+  uv:         { g: L.layerGroup(), critical: false, mode: 'forecast' },
+  dust:       { g: L.layerGroup(), critical: false, mode: 'forecast' },
+  space:      { g: L.layerGroup(), critical: false, mode: 'chronic' },
+};
+Object.values(LAYERS).forEach(l => { if (l.critical) l.g.addTo(map); });
+
+/* ══ ALERTS ═════════════════════════════════════ */
+const alerts = [];
+function pushAlert(a) {
+  alerts.unshift(a);
+  if (alerts.length > 80) alerts.pop();
+  renderFeed();
+}
+
+/* ══ LOOKUP TABLES ══════════════════════════════ */
+const SEV_COLOR  = { critical:'#ff2d2d', warning:'#ffaa00', advisory:'#00d4ff', nominal:'#00e87a' };
+const TYPE_COLOR = {
+  SEISMIC:'#ffcc00', FIRE:'#ff5500', CYCLONE:'#00aaff', FLOOD:'#2266ff',
+  TSUNAMI:'#00ccee', VOLCANO:'#ff6600', DROUGHT:'#c8a060',
+  AQI:'#cc44ff', HEAT:'#ff6633', UV:'#ffee00', DUST:'#c8a060',
+  HEALTH:'#00e87a', SOLAR:'#ff3fa0', GEOMAG:'#ff3fa0',
+};
+
+/* ══ HELPERS ════════════════════════════════════ */
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const ms = Date.now() - new Date(ts).getTime();
+  if (isNaN(ms) || ms < 0) return '—';
+  const m = Math.floor(ms / 60000);
+  if (m < 2)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function setCount(key, n) {
+  const el = document.getElementById('ct-' + key);
+  if (el) el.textContent = n > 0 ? n : '—';
+}
+
+function feedSt(id, state, msg) {
+  const el = document.getElementById('fs-' + id);
+  if (el) { el.textContent = msg; el.className = 'ldf-st ' + state; }
+}
+
+function progress(pct, msg) {
+  document.getElementById('ld-fill').style.width = pct + '%';
+  document.getElementById('ld-status').textContent = msg;
+}
+
+// Stull (2011) wet-bulb approximation
+function wetBulb(T, RH) {
+  return T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659))
+    + Math.atan(T + RH)
+    - Math.atan(RH - 1.676331)
+    + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH)
+    - 4.686035;
+}
+
+/* ══ MARKER FACTORY ═════════════════════════════ */
+function mkMarker(color, size, pulse) {
+  size = Math.max(4, size || 8);
+  const r    = size / 2;
+  const ring = pulse
+    ? `<circle cx="12" cy="12" r="${r}" fill="none" stroke="${color}" stroke-width="1" opacity=".6">
+         <animate attributeName="r" from="${r}" to="${r + 8}" dur="2.4s" repeatCount="indefinite"/>
+         <animate attributeName="opacity" from=".6" to="0" dur="2.4s" repeatCount="indefinite"/>
+       </circle>`
+    : '';
+  return L.divIcon({
+    className: '',
+    html: `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      ${ring}
+      <circle cx="12" cy="12" r="${r}" fill="${color}" opacity=".9"/>
+      <circle cx="12" cy="12" r="${r + 1.5}" fill="none" stroke="${color}" stroke-width=".5" opacity=".3"/>
+    </svg>`,
+    iconSize: [24, 24], iconAnchor: [12, 12],
+  });
+}
+
+/* ══ POPUP FACTORY ══════════════════════════════ */
+function mkPopup(type, title, rows, mode) {
+  const tc = TYPE_COLOR[type] || '#ccc';
+  const rowsHTML = rows.map(function(r) {
+    return '<div class="pu-row">'
+      + '<span class="pu-key">' + r[0] + '</span>'
+      + '<span class="pu-val"' + (r[2] ? ' style="color:' + r[2] + '"' : '') + '>' + r[1] + '</span>'
+      + '</div>';
+  }).join('');
+  return '<div class="pu-head" style="border-left:3px solid ' + tc + '">'
+    + '<span class="pu-type" style="color:' + tc + '">' + type + '</span>'
+    + (mode ? '<span class="pu-mode">' + mode + '</span>' : '')
+    + '</div>'
+    + '<div class="pu-body"><div class="pu-title">' + title + '</div>' + rowsHTML + '</div>';
+}
+
+/* ══ FEED RENDER ════════════════════════════════ */
+function renderFeed() {
+  document.getElementById('alert-total').textContent = alerts.length;
+  document.getElementById('feed').innerHTML = alerts.slice(0, 50).map(function(a) {
+    const tc = TYPE_COLOR[a.type] || '#ccc';
+    const sc = SEV_COLOR[a.severity]  || '#ccc';
+    const lat = a.lat != null ? a.lat : 'null';
+    const lon = a.lon != null ? a.lon : 'null';
+    return '<div class="feed-item" onclick="flyTo(' + lat + ',' + lon + ')">'
+      + '<div class="fi-top">'
+      + '<span class="fi-badge" style="background:' + tc + '18;color:' + tc + ';border:1px solid ' + tc + '35">' + a.type + '</span>'
+      + '<span class="fi-sev" style="color:' + sc + '">' + (a.severity || '').toUpperCase() + '</span>'
+      + '</div>'
+      + '<div class="fi-loc">' + a.location + '</div>'
+      + '<div class="fi-det">' + a.detail + '</div>'
+      + '<div class="fi-time">' + a.time + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function flyTo(lat, lon) {
+  if (lat != null && lon != null) map.flyTo([lat, lon], 7, { duration: 1.4 });
+}
+
+/* ══════════════════════════════════════════════
+   DATA FETCHERS
+══════════════════════════════════════════════ */
+
+/* 1 — EARTHQUAKES (USGS) */
+async function fetchEarthquakes() {
+  feedSt('eq', 'load', 'CONNECTING');
+  progress(10, 'SCANNING SEISMIC NETWORK...');
+  try {
+    const url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson'
+      + '&minlatitude=2&maxlatitude=40&minlongitude=52&maxlongitude=102'
+      + '&minmagnitude=2.5&limit=200&orderby=time';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const features = data.features || [];
+
+    features.forEach(function(f) {
+      const p   = f.properties;
+      const lon = f.geometry.coordinates[0];
+      const lat = f.geometry.coordinates[1];
+      const dep = f.geometry.coordinates[2];
+      const mag = p.mag || 0;
+      const col = mag >= 6 ? '#ff2d2d' : mag >= 5 ? '#ffaa00' : mag >= 4 ? '#ffcc00' : '#88aa22';
+      const sev = mag >= 6 ? 'critical' : mag >= 5 ? 'warning' : mag >= 4 ? 'advisory' : 'nominal';
+
+      const m = L.marker([lat, lon], { icon: mkMarker(col, mag * 2.8, mag >= 5) });
+      m.bindPopup(mkPopup('SEISMIC', p.place || 'Unknown location', [
+        ['MAGNITUDE', 'M ' + mag.toFixed(1), col],
+        ['DEPTH',     dep.toFixed(1) + ' km'],
+        ['FELT',      p.felt ? p.felt + ' reports' : 'None reported'],
+        ['DETECTED',  timeAgo(p.time)],
+      ], 'ACUTE'), { maxWidth: 240 });
+      LAYERS.earthquake.g.addLayer(m);
+
+      if (mag >= 4.5) pushAlert({
+        type: 'SEISMIC', location: p.place || 'India Region',
+        detail: 'M' + mag.toFixed(1) + ' at ' + dep.toFixed(0) + 'km depth',
+        severity: sev, time: timeAgo(p.time), lat: lat, lon: lon,
+      });
+    });
+
+    setCount('earthquake', features.length);
+    feedSt('eq', 'ok', 'OK · ' + features.length);
+  } catch (e) {
+    console.error('[USGS]', e.message);
+    feedSt('eq', 'err', 'OFFLINE');
+  }
+}
+
+/* 3 — ATMOSPHERE (OpenMeteo: heat + UV + dust + AQI) */
+async function fetchWeather() {
+  feedSt('wx', 'load', 'CONNECTING');
+  progress(36, 'READING ATMOSPHERIC SENSORS...');
+
+  const CITIES = [
+    { n:'Delhi',              lat:28.65, lon:77.23 },
+    { n:'Mumbai',             lat:19.07, lon:72.88 },
+    { n:'Kolkata',            lat:22.57, lon:88.37 },
+    { n:'Chennai',            lat:13.08, lon:80.27 },
+    { n:'Hyderabad',          lat:17.39, lon:78.49 },
+    { n:'Ahmedabad',          lat:23.02, lon:72.57 },
+    { n:'Jaipur',             lat:26.91, lon:75.79 },
+    { n:'Bhubaneswar',        lat:20.30, lon:85.83 },
+    { n:'Jodhpur',            lat:26.29, lon:73.02 },
+    { n:'Nagpur',             lat:21.15, lon:79.09 },
+    { n:'Patna',              lat:25.59, lon:85.14 },
+    { n:'Guwahati',           lat:26.18, lon:91.75 },
+    { n:'Bengaluru',          lat:12.97, lon:77.59 },
+    { n:'Thiruvananthapuram', lat: 8.50, lon:76.95 },
+    { n:'Karachi',            lat:24.86, lon:67.01 },
+    { n:'Dhaka',              lat:23.81, lon:90.41 },
+    { n:'Kathmandu',          lat:27.71, lon:85.31 },
+  ];
+
+  let hc = 0, uc = 0, dc = 0, ac = 0, ok = 0;
+
+  const fetches = CITIES.map(async function(c) {
+    try {
+      const wxUrl = 'https://api.open-meteo.com/v1/forecast'
+        + '?latitude=' + c.lat + '&longitude=' + c.lon
+        + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,uv_index'
+        + '&timezone=Asia%2FKolkata&forecast_days=1';
+      const aqUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality'
+        + '?latitude=' + c.lat + '&longitude=' + c.lon
+        + '&current=pm10,dust,us_aqi&timezone=Asia%2FKolkata';
+
+      const [wxRes, aqRes] = await Promise.all([fetch(wxUrl), fetch(aqUrl)]);
+      const wd    = wxRes.ok ? await wxRes.json() : {};
+      const adRaw = aqRes.ok ? await aqRes.json() : {};
+      const wc    = wd.current    || {};
+      const aqData = adRaw.current || {};
+
+      const T    = wc.temperature_2m;
+      const RH   = wc.relative_humidity_2m;
+      const UV   = wc.uv_index;
+      const WB   = (T != null && RH != null) ? wetBulb(T, RH) : null;
+      const pm   = aqData.pm10;
+      const du   = aqData.dust;
+      const usAqi = aqData.us_aqi;
+
+      // HEAT
+      if (WB != null) {
+        const col = WB >= 35 ? '#ff1a1a' : WB >= 32 ? '#ff5500' : WB >= 28 ? '#ff9900' : '#cc7700';
+        const sev = WB >= 35 ? 'critical' : WB >= 32 ? 'warning' : WB >= 28 ? 'advisory' : 'nominal';
+        const lbl = WB >= 35 ? 'UNSURVIVABLE OUTDOORS' : WB >= 32 ? 'DANGEROUS' : WB >= 28 ? 'CAUTION' : 'MANAGEABLE';
+        const m = L.marker([c.lat + 0.1, c.lon], { icon: mkMarker(col, 7, WB >= 32) });
+        m.bindPopup(mkPopup('HEAT', c.n + ' — Heat / Wet Bulb', [
+          ['AIR TEMP',   T != null ? T.toFixed(1) + '°C' : '—'],
+          ['FEELS LIKE', wc.apparent_temperature != null ? wc.apparent_temperature.toFixed(1) + '°C' : '—'],
+          ['WET BULB',   WB.toFixed(1) + '°C', col],
+          ['RISK',       lbl, col],
+          ['HUMIDITY',   RH != null ? RH.toFixed(0) + '%' : '—'],
+        ], 'CHRONIC'), { maxWidth: 240 });
+        LAYERS.heat.g.addLayer(m);
+        hc++;
+        if (WB >= 30) pushAlert({
+          type: 'HEAT', location: c.n,
+          detail: 'Wet bulb ' + WB.toFixed(1) + '°C — ' + lbl,
+          severity: sev, time: 'Current', lat: c.lat, lon: c.lon,
+        });
+      }
+
+      // UV
+      if (UV != null && UV >= 3) {
+        const col = UV >= 11 ? '#ff1a1a' : UV >= 8 ? '#ff6a00' : UV >= 6 ? '#ffcc00' : '#88cc00';
+        const lbl = UV >= 11 ? 'EXTREME' : UV >= 8 ? 'VERY HIGH' : UV >= 6 ? 'HIGH' : 'MODERATE';
+        const m = L.marker([c.lat - 0.1, c.lon + 0.1], { icon: mkMarker(col, 6) });
+        m.bindPopup(mkPopup('UV', c.n + ' — UV Index', [
+          ['UV INDEX',   UV.toFixed(1), col],
+          ['CATEGORY',   lbl, col],
+          ['BURN TIME',  UV >= 11 ? '<10 min' : UV >= 8 ? '<15 min' : UV >= 6 ? '<25 min' : '<40 min'],
+        ], 'FORECAST'), { maxWidth: 220 });
+        LAYERS.uv.g.addLayer(m);
+        uc++;
+      }
+
+      // DUST
+      const dv = (du != null && du > 0) ? du : pm;
+      if (dv != null && dv > 50) {
+        const col = dv > 400 ? '#c8601a' : dv > 150 ? '#d4842a' : '#c8a060';
+        const lbl = dv > 400 ? 'DUST STORM' : dv > 150 ? 'HIGH DUST' : 'ELEVATED';
+        const m = L.marker([c.lat, c.lon - 0.12], { icon: mkMarker(col, 6, dv > 150) });
+        m.bindPopup(mkPopup('DUST', c.n + ' — Dust / Particulates', [
+          ['DUST/PM10',  dv.toFixed(0) + ' μg/m³', col],
+          ['CONDITION',  lbl, col],
+          ['VISIBILITY', dv > 400 ? 'SEVERELY REDUCED' : dv > 150 ? 'REDUCED' : 'FAIR'],
+        ], 'FORECAST'), { maxWidth: 220 });
+        LAYERS.dust.g.addLayer(m);
+        dc++;
+        if (dv > 150) pushAlert({
+          type: 'DUST', location: c.n,
+          detail: lbl + ' — ' + dv.toFixed(0) + ' μg/m³',
+          severity: dv > 400 ? 'warning' : 'advisory', time: 'Current', lat: c.lat, lon: c.lon,
+        });
+      }
+
+      // AQI (from OpenMeteo us_aqi — same API call, no extra cost)
+      if (usAqi != null && usAqi >= 0) {
+        const aqi = Math.round(usAqi);
+        const col = aqi > 300 ? '#7e0023' : aqi > 200 ? '#8b008b'
+          : aqi > 150 ? '#cc0000' : aqi > 100 ? '#ff7e00'
+          : aqi > 50  ? '#cc9900' : '#009966';
+        const lbl = aqi > 300 ? 'HAZARDOUS' : aqi > 200 ? 'VERY UNHEALTHY'
+          : aqi > 150 ? 'UNHEALTHY' : aqi > 100 ? 'USG-SENSITIVE'
+          : aqi > 50  ? 'MODERATE'  : 'GOOD';
+        const sev = aqi > 200 ? 'critical' : aqi > 150 ? 'warning' : aqi > 100 ? 'advisory' : 'nominal';
+        const m = L.marker([c.lat + 0.05, c.lon + 0.15], { icon: mkMarker(col, 8) });
+        m.bindPopup(mkPopup('AQI', c.n, [
+          ['US AQI',   '' + aqi, col],
+          ['CATEGORY', lbl, col],
+          ['PM10',     pm != null ? pm.toFixed(0) + ' μg/m³' : '—'],
+          ['RISK',     sev.toUpperCase()],
+          ['SOURCE',   'Open-Meteo CAMS'],
+        ], 'CHRONIC'), { maxWidth: 220 });
+        LAYERS.aqi.g.addLayer(m);
+        ac++;
+        if (aqi > 150) pushAlert({
+          type: 'AQI', location: c.n,
+          detail: lbl + ' — AQI ' + aqi,
+          severity: sev, time: 'Current', lat: c.lat, lon: c.lon,
+        });
+      }
+
+      ok++;
+    } catch (e) { /* individual city failure — skip silently */ }
+  });
+
+  await Promise.allSettled(fetches);
+  setCount('heat', hc);
+  setCount('uv',   uc);
+  setCount('dust', dc);
+  setCount('aqi',  ac);
+  feedSt('wx',  ok > 0 ? 'ok' : 'err', ok > 0 ? 'OK · ' + ok + '/' + CITIES.length : 'OFFLINE');
+  feedSt('aqi', ac > 0 ? 'ok' : 'err', ac > 0 ? 'OK · ' + ac : 'NO DATA');
+}
+
+/* 4 — SPACE WEATHER (NASA DONKI + NOAA SWPC) */
+async function fetchSpaceWeather() {
+  feedSt('space', 'load', 'CONNECTING');
+  progress(52, 'CONNECTING TO SPACE WEATHER FEEDS...');
+
+  // Solar flares via NASA DONKI
+  try {
+    const end   = new Date().toISOString().split('T')[0];
+    const start = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
+    const res   = await fetch('https://api.nasa.gov/DONKI/FLR?startDate=' + start + '&endDate=' + end + '&api_key=' + CFG.NASA_KEY);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const flares = await res.json();
+
+    if (Array.isArray(flares) && flares.length > 0) {
+      const cls = flares[flares.length - 1].classType || '—';
+      const el  = document.getElementById('sw-flare');
+      el.textContent = cls;
+      el.style.color = cls[0] === 'X' ? '#ff2d2d' : cls[0] === 'M' ? '#ffaa00' : '#00d4ff';
+      setCount('space', flares.length);
+      flares.filter(function(f) { return f.classType && /^[XM]/.test(f.classType); })
+        .slice(-4).forEach(function(f) {
+          pushAlert({
+            type: 'SOLAR', location: 'Solar Activity',
+            detail: 'Class ' + f.classType + ' flare — GPS/grid disruption risk',
+            severity: f.classType[0] === 'X' ? 'warning' : 'advisory',
+            time: timeAgo(f.beginTime), lat: null, lon: null,
+          });
+        });
+    }
+  } catch (e) { console.error('[DONKI]', e.message); }
+
+  // Geomagnetic Kp index via NOAA SWPC
+  try {
+    const res  = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    // First row is header: ["time_tag","Kp","observed","noaa_scale"]
+    const data = rows.filter(function(r) { return r[0] !== 'time_tag'; });
+    // Find last row with a valid numeric Kp value (NOAA sometimes returns "nan")
+    let kp = null;
+    for (let i = data.length - 1; i >= 0; i--) {
+      const val = parseFloat(data[i][1]);
+      if (!isNaN(val)) { kp = val; break; }
+    }
+    if (kp === null) throw new Error('No valid Kp reading found');
+    const kpEl = document.getElementById('sw-kp');
+    kpEl.textContent = kp.toFixed(1);
+    kpEl.style.color = kp >= 7 ? '#ff2d2d' : kp >= 5 ? '#ffaa00' : '#00d4ff';
+    const desc = kp >= 7 ? 'SEVERE STORM — grid vulnerability HIGH'
+      : kp >= 5 ? 'GEOMAGNETIC STORM — comms/grid disruptions possible'
+      : kp >= 4 ? 'ACTIVE CONDITIONS — minor disruptions'
+      : 'QUIET — nominal conditions';
+    document.getElementById('sw-kp-desc').textContent = desc;
+    feedSt('space', 'ok', 'OK · Kp=' + kp.toFixed(1));
+    if (kp >= 5) pushAlert({
+      type: 'GEOMAG', location: 'India Region',
+      detail: 'Kp=' + kp.toFixed(1) + ' — ' + desc,
+      severity: kp >= 7 ? 'critical' : 'warning', time: 'Current', lat: null, lon: null,
+    });
+  } catch (e) {
+    console.error('[SWPC]', e.message);
+    feedSt('space', 'err', 'OFFLINE');
+  }
+}
+
+/* 5 — DISASTERS (GDACS REST API) */
+async function fetchDisasters() {
+  feedSt('gdacs', 'load', 'CONNECTING');
+  progress(66, 'CONNECTING TO GLOBAL DISASTER NETWORK...');
+
+  const today = new Date().toISOString().split('T')[0];
+  const past  = new Date(Date.now() - 30 * 864e5).toISOString().split('T')[0];
+  const url   = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH'
+    + '?eventtype=EQ,TC,FL,VO,DR'
+    + '&alertlevel=Green,Orange,Red'
+    + '&fromDate=' + past + '&toDate=' + today + '&pagesize=50';
+
+  try {
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const features = data.features || [];
+
+    // Extract centroid coordinates safely from any GeoJSON geometry type
+    function extractLatLon(geometry) {
+      if (!geometry || !geometry.coordinates) return null;
+      const type   = geometry.type;
+      const coords = geometry.coordinates;
+      if (type === 'Point') {
+        return { lon: coords[0], lat: coords[1] };
+      }
+      if (type === 'Polygon' && coords[0] && coords[0][0]) {
+        // Use first vertex of outer ring as approximate position
+        return { lon: coords[0][0][0], lat: coords[0][0][1] };
+      }
+      if (type === 'MultiPolygon' && coords[0] && coords[0][0] && coords[0][0][0]) {
+        return { lon: coords[0][0][0][0], lat: coords[0][0][0][1] };
+      }
+      return null;
+    }
+
+    let count = 0;
+    features.forEach(function(f) {
+      const pos = extractLatLon(f.geometry);
+      if (!pos) return;
+      const lat = pos.lat, lon = pos.lon;
+      // Must be valid numbers and within South Asia bounding box
+      if (typeof lat !== 'number' || typeof lon !== 'number') return;
+      if (isNaN(lat) || isNaN(lon)) return;
+      if (lat < 2 || lat > 40 || lon < 52 || lon > 102) return;
+
+      const p    = f.properties || {};
+      const et   = (p.eventtype || '').toUpperCase();
+      const type = et === 'TC' ? 'CYCLONE' : et === 'FL' ? 'FLOOD'
+        : et === 'EQ' ? 'SEISMIC' : et === 'VO' ? 'VOLCANO'
+        : et === 'DR' ? 'DROUGHT' : 'DISASTER';
+      const al   = (p.alertlevel || '').toLowerCase();
+      const sev  = al === 'red' ? 'critical' : al === 'orange' ? 'warning' : 'advisory';
+      const col  = TYPE_COLOR[type] || '#aaa';
+      const name = (p.eventname || type) + (p.country ? ' — ' + p.country : '');
+
+      const m = L.marker([lat, lon], { icon: mkMarker(col, 11, sev !== 'advisory') });
+      m.bindPopup(mkPopup(type, name, [
+        ['ALERT LEVEL', al.toUpperCase(), SEV_COLOR[sev]],
+        ['COUNTRY',     p.country || '—'],
+        ['PUBLISHED',   timeAgo(p.fromdate)],
+        ['SOURCE',      'GDACS — UN Coordination'],
+      ], 'ACUTE'), { maxWidth: 260 });
+      LAYERS.disaster.g.addLayer(m);
+
+      pushAlert({
+        type: type, location: name.slice(0, 50),
+        detail: al.toUpperCase() + ' GDACS ALERT',
+        severity: sev, time: timeAgo(p.fromdate), lat: lat, lon: lon,
+      });
+      count++;
+    });
+
+    setCount('disaster', count);
+    feedSt('gdacs', 'ok', 'OK · ' + count);
+  } catch (e) {
+    console.error('[GDACS]', e.message);
+    feedSt('gdacs', 'err', 'OFFLINE');
+    setCount('disaster', 0);
+  }
+}
+
+/* 6 — HEALTH (WHO RSS + endemic risk layers) */
+async function fetchHealth() {
+  feedSt('who', 'load', 'CONNECTING');
+  progress(82, 'SCANNING EPIDEMIOLOGICAL FEEDS...');
+  let count = 0;
+
+  // WHO news RSS via rss2json
+  try {
+    const rss = 'https://www.who.int/rss-feeds/news-english.xml';
+    const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=30';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error('rss2json: ' + (data.message || 'error'));
+
+    const REGION = ['india','bangladesh','pakistan','nepal','sri lanka','myanmar','south asia','southeast asia'];
+    const DCOORDS = {
+      nipah: [10.52,76.21], dengue: [12.97,77.59], cholera: [22.57,88.37],
+      malaria: [20.30,85.83], leptospirosis: [19.07,72.88],
+      encephalitis: [26.85,80.95], plague: [26.28,73.02], mpox: [19.07,72.88],
+    };
+
+    (data.items || []).forEach(function(item) {
+      const full = ((item.title || '') + ' ' + (item.description || '')).toLowerCase();
+      if (!REGION.some(function(r) { return full.includes(r); })) return;
+      let coords = null;
+      for (const dis in DCOORDS) {
+        if (full.includes(dis)) { coords = DCOORDS[dis]; break; }
+      }
+      if (coords) {
+        const m = L.marker(coords, { icon: mkMarker('#00e87a', 9, true) });
+        m.bindPopup(mkPopup('HEALTH', item.title || 'WHO Alert', [
+          ['SOURCE',    'WHO Health Alert'],
+          ['PUBLISHED', timeAgo(item.pubDate)],
+        ], 'ACUTE'), { maxWidth: 260 });
+        LAYERS.health.g.addLayer(m);
+      }
+      pushAlert({
+        type: 'HEALTH', location: (item.title || 'WHO').slice(0, 50),
+        detail: 'WHO Health Alert — South Asia',
+        severity: 'advisory', time: timeAgo(item.pubDate),
+        lat: coords ? coords[0] : null, lon: coords ? coords[1] : null,
+      });
+      count++;
+    });
+  } catch (e) {
+    console.error('[WHO]', e.message);
+  }
+
+  // Endemic / seasonal risk markers (always shown — year-round or seasonal)
+  const mo = new Date().getMonth() + 1;
+  const ENDEMIC = [
+    { n:'Odisha — Malaria Zone',       lat:20.0, lon:85.5, d:'MALARIA',       mo:null },
+    { n:'Jharkhand — Malaria Zone',    lat:23.6, lon:85.5, d:'MALARIA',       mo:null },
+    { n:'Chhattisgarh — Malaria Zone', lat:21.2, lon:81.6, d:'MALARIA',       mo:null },
+    { n:'Kerala — Dengue / Nipah',     lat:10.5, lon:76.5, d:'DENGUE/NIPAH',  mo:null },
+    { n:'Delhi NCR — Dengue Peak',     lat:28.6, lon:77.1, d:'DENGUE',        mo:[7,8,9,10,11] },
+    { n:'Mumbai — Leptospirosis',      lat:19.1, lon:72.9, d:'LEPTOSPIROSIS', mo:[6,7,8,9] },
+    { n:'West Bengal — Dengue Peak',   lat:22.5, lon:88.4, d:'DENGUE',        mo:[8,9,10,11] },
+    { n:'UP — Encephalitis Zone',      lat:26.9, lon:83.0, d:'ENCEPHALITIS',  mo:[7,8,9] },
+  ];
+
+  ENDEMIC.forEach(function(e) {
+    if (e.mo !== null && !e.mo.includes(mo)) return;
+    const status = e.mo === null ? 'YEAR-ROUND RISK' : 'SEASONAL PEAK';
+    const m = L.marker([e.lat, e.lon], { icon: mkMarker('#00cc66', 6) });
+    m.bindPopup(mkPopup('HEALTH', e.n, [
+      ['DISEASE', e.d],
+      ['STATUS',  status],
+      ['BASIS',   'Historical endemic / NVBDCP'],
+    ], 'CHRONIC'), { maxWidth: 240 });
+    LAYERS.health.g.addLayer(m);
+    count++;
+  });
+
+  setCount('health', count);
+  feedSt('who', 'ok', 'OK · ' + count);
+}
+
+/* ══════════════════════════════════════════════
+   UI LOGIC
+══════════════════════════════════════════════ */
+
+// Layer toggles
+document.querySelectorAll('.ltoggle:not(.no-key)').forEach(function(el) {
+  const key = el.dataset.key;
+  if (!key || !LAYERS[key]) return;
+  el.addEventListener('click', function() {
+    el.classList.toggle('off');
+    if (el.classList.contains('off')) map.removeLayer(LAYERS[key].g);
+    else map.addLayer(LAYERS[key].g);
+  });
+});
+
+// Mode switching
+document.querySelectorAll('.mode-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    const mode = btn.dataset.mode;
+    document.querySelectorAll('.ltoggle:not(.no-key)').forEach(function(el) {
+      const key    = el.dataset.key;
+      const elMode = el.dataset.mode;
+      if (!key || !LAYERS[key]) return;
+      const show = mode === 'all' || elMode === mode;
+      el.classList.toggle('off', !show);
+      if (show) map.addLayer(LAYERS[key].g);
+      else map.removeLayer(LAYERS[key].g);
+    });
+  });
+});
+
+// Panel collapse
+document.getElementById('left-collapser').addEventListener('click', function() {
+  const p = document.getElementById('left-panel');
+  p.classList.toggle('collapsed');
+  document.getElementById('left-collapser').textContent = p.classList.contains('collapsed') ? '▶' : '◀';
+});
+document.getElementById('right-collapser').addEventListener('click', function() {
+  const p = document.getElementById('right-panel');
+  p.classList.toggle('collapsed');
+  document.getElementById('right-collapser').textContent = p.classList.contains('collapsed') ? '◀' : '▶';
+});
+
+// IST clock
+function tickClock() {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const p   = function(n) { return String(n).padStart(2, '0'); };
+  document.getElementById('clock').textContent =
+    p(ist.getHours()) + ':' + p(ist.getMinutes()) + ':' + p(ist.getSeconds());
+}
+setInterval(tickClock, 1000); tickClock();
+
+// Ticker
+function refreshTicker() {
+  if (!alerts.length) return;
+  document.getElementById('ticker').textContent =
+    alerts.slice(0, 15).map(function(a) {
+      return '◆ [' + a.type + '] ' + a.location + ' — ' + a.detail;
+    }).join('          ');
+}
+
+/* ══ MAIN INIT ══════════════════════════════════ */
+async function init() {
+  try { await fetchEarthquakes(); } catch(e) { console.error(e); }
+  try { await fetchWeather();     } catch(e) { console.error(e); }
+  try { await fetchSpaceWeather();} catch(e) { console.error(e); }
+  try { await fetchDisasters();   } catch(e) { console.error(e); }
+  try { await fetchHealth();      } catch(e) { console.error(e); }
+
+  progress(100, 'ALL FEEDS LOADED');
+  refreshTicker();
+
+  // Auto-refresh every 5 min
+  setInterval(async function() {
+    Object.values(LAYERS).forEach(function(l) { l.g.clearLayers(); });
+    alerts.length = 0;
+    try { await fetchEarthquakes(); } catch(e) {}
+    try { await fetchWeather();     } catch(e) {}
+    try { await fetchSpaceWeather();} catch(e) {}
+    try { await fetchDisasters();   } catch(e) {}
+    try { await fetchHealth();      } catch(e) {}
+    refreshTicker();
+  }, 5 * 60 * 1000);
+
+  // Dismiss loading screen
+  setTimeout(function() {
+    const ld = document.getElementById('loading');
+    ld.style.opacity = '0';
+    setTimeout(function() { ld.style.display = 'none'; }, 700);
+  }, 1500);
+}
+
+// Detect file:// and warn
+if (window.location.protocol === 'file:') {
+  document.getElementById('file-warn').style.display = 'block';
+}
+
+init();
+</script>
+</body>
+</html>
