@@ -657,7 +657,72 @@ async function fetchWeather() {
   feedSt('aqi', ac > 0 ? 'ok' : 'err', ac > 0 ? 'OK · ' + ac : 'NO DATA');
 }
 
-/* 4 — SPACE WEATHER (NASA DONKI + NOAA SWPC) */
+/* FIRES — NASA FIRMS VIIRS (requires free MAP_KEY) */
+async function fetchFires() {
+  if (!CFG.FIRMS_KEY) { feedSt('fire', 'err', 'NO KEY'); return; }
+  feedSt('fire', 'load', 'CONNECTING');
+  try {
+    // VIIRS SNPP NRT — India bounding box W,S,E,N — last 1 day
+    const url = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/'
+      + CFG.FIRMS_KEY + '/VIIRS_SNPP_NRT/61,6,100,38/1';
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) throw new Error('No fire data returned');
+
+    const hdr     = lines[0].split(',');
+    const latI    = hdr.indexOf('latitude');
+    const lonI    = hdr.indexOf('longitude');
+    const confI   = hdr.indexOf('confidence');
+    const frpI    = hdr.indexOf('frp');
+    const dayI    = hdr.indexOf('daynight');
+
+    let count = 0;
+    lines.slice(1).forEach(function(line) {
+      if (!line.trim()) return;
+      const c   = line.split(',');
+      const lat = parseFloat(c[latI]);
+      const lon = parseFloat(c[lonI]);
+      const conf = c[confI] || 'n';
+      const frp  = parseFloat(c[frpI]);
+      const dn   = c[dayI] || '?';
+      if (isNaN(lat) || isNaN(lon)) return;
+      if (conf === 'l') return; // skip low confidence detections
+      const col  = conf === 'h' ? '#ff2200' : '#ff6600';
+      const sev  = conf === 'h' ? 'warning' : 'advisory';
+      const m = L.marker([lat, lon], { icon: mkMarker(col, 5, conf === 'h') });
+      m.bindPopup(mkPopup('FIRE', 'Active Fire — NASA VIIRS', [
+        ['CONFIDENCE',  conf === 'h' ? 'HIGH' : 'NOMINAL', col],
+        ['FIRE POWER',  !isNaN(frp) ? frp.toFixed(1) + ' MW' : '—'],
+        ['TIME OF DAY', dn === 'D' ? 'Daytime' : dn === 'N' ? 'Nighttime' : '—'],
+        ['SOURCE',      'NASA FIRMS / VIIRS SNPP'],
+        ['WINDOW',      'Last 24 hours'],
+      ], 'ACUTE'), { maxWidth: 220 });
+      LAYERS.fire.g.addLayer(m);
+      count++;
+      if (conf === 'h' && !isNaN(frp) && frp > 50) pushAlert({
+        type: 'FIRE', location: lat.toFixed(2) + '°N ' + lon.toFixed(2) + '°E',
+        detail: 'High confidence fire — ' + frp.toFixed(0) + ' MW radiative power',
+        severity: sev, time: 'Last 24h', lat: lat, lon: lon,
+      });
+    });
+
+    // Auto-enable fire layer if fires found
+    if (count > 0) {
+      LAYERS.fire.g.addTo(map);
+      const toggle = document.querySelector('[data-key="fire"]');
+      if (toggle) { toggle.classList.remove('no-key', 'off'); }
+    }
+    setCount('fire', count);
+    feedSt('fire', 'ok', 'OK · ' + count);
+  } catch(e) {
+    console.error('[FIRMS]', e.message);
+    feedSt('fire', 'err', 'OFFLINE');
+  }
+}
+
+
 async function fetchSpaceWeather() {
   feedSt('space', 'load', 'CONNECTING');
   progress(52, 'CONNECTING TO SPACE WEATHER FEEDS...');
@@ -950,6 +1015,7 @@ function refreshTicker() {
 async function init() {
   try { await fetchEarthquakes(); } catch(e) { console.error(e); }
   try { await fetchWeather();     } catch(e) { console.error(e); }
+  try { await fetchFires();       } catch(e) { console.error(e); }
   try { await fetchSpaceWeather();} catch(e) { console.error(e); }
   try { await fetchDisasters();   } catch(e) { console.error(e); }
   try { await fetchHealth();      } catch(e) { console.error(e); }
@@ -963,6 +1029,7 @@ async function init() {
     alerts.length = 0;
     try { await fetchEarthquakes(); } catch(e) {}
     try { await fetchWeather();     } catch(e) {}
+    try { await fetchFires();       } catch(e) {}
     try { await fetchSpaceWeather();} catch(e) {}
     try { await fetchDisasters();   } catch(e) {}
     try { await fetchHealth();      } catch(e) {}
