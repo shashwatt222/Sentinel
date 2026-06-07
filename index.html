@@ -222,7 +222,7 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
       <span class="llabel">OUTBREAK / HEALTH</span>
       <span class="lcount" id="ct-health">—</span>
     </div>
-    <div class="ltoggle no-key" title="Requires FIRMS MAP_KEY — see CFG in script">
+    <div class="ltoggle no-key" data-key="fire" title="Requires FIRMS MAP_KEY — see CFG in script">
       <div class="ldot" style="background:#ff5500"></div>
       <span class="llabel">ACTIVE FIRE</span>
       <span class="lcount" style="font-size:7px;color:#ff5500">KEY REQ</span>
@@ -337,6 +337,7 @@ const LAYERS = {
   earthquake: { g: L.layerGroup(), critical: true,  mode: 'acute' },
   disaster:   { g: L.layerGroup(), critical: true,  mode: 'acute' },
   health:     { g: L.layerGroup(), critical: true,  mode: 'acute' },
+  fire:       { g: L.layerGroup(), critical: false, mode: 'acute' },
   aqi:        { g: L.layerGroup(), critical: false, mode: 'chronic' },
   heat:       { g: L.layerGroup(), critical: false, mode: 'chronic' },
   uv:         { g: L.layerGroup(), critical: false, mode: 'forecast' },
@@ -399,26 +400,53 @@ function wetBulb(T, RH) {
     - 4.686035;
 }
 
-/* ══ MARKER FACTORY ═════════════════════════════ */
-function mkMarker(color, size, pulse) {
-  size = Math.max(4, size || 8);
-  const r    = size / 2;
-  const ring = pulse
-    ? `<circle cx="12" cy="12" r="${r}" fill="none" stroke="${color}" stroke-width="1" opacity=".6">
-         <animate attributeName="r" from="${r}" to="${r + 8}" dur="2.4s" repeatCount="indefinite"/>
-         <animate attributeName="opacity" from=".6" to="0" dur="2.4s" repeatCount="indefinite"/>
-       </circle>`
+/* ══ GLYPH LIBRARY ══════════════════════════════ */
+const GLYPHS = {
+  SEISMIC: function(c) { return '<circle cx="12" cy="12" r="3" fill="'+c+'"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="'+c+'" stroke-width="1.5"/><circle cx="12" cy="12" r="10.5" fill="none" stroke="'+c+'" stroke-width="1" opacity=".45"/>'; },
+  FIRE:    function(c) { return '<path d="M12 21C8 21 5 18 5 14C5 10 8.5 8 9 5C9 5 10.5 7.5 12 8.5C13.5 7.5 15 5 15 5C15 8 19 10 19 14C19 18 16 21 12 21Z" fill="'+c+'"/><ellipse cx="12" cy="17" rx="2.5" ry="2" fill="#ff9966" opacity=".55"/>'; },
+  CYCLONE: function(c) { return '<path d="M12 4A8 8 0 0 1 20 12A8 8 0 0 1 12 20A8 8 0 0 1 4 12" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round"/><path d="M4 9.5L4 12.5L7 12.5" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; },
+  FLOOD:   function(c) { return '<path d="M2 12C4.5 9 6.5 9 9 12C11.5 15 13.5 15 16 12C18.5 9 20.5 9 23 12" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round"/><path d="M2 17C4.5 14 6.5 14 9 17C11.5 20 13.5 20 16 17C18.5 14 20.5 14 23 17" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>'; },
+  TSUNAMI: function(c) { return '<path d="M2 18C5 14.5 7 14.5 10 18C12 20.5 14 20.5 16 18C17.5 16 19 14.5 22 17" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="12" y1="14" x2="12" y2="5" stroke="'+c+'" stroke-width="2" stroke-linecap="round"/><path d="M9.5 8L12 5L14.5 8" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'; },
+  VOLCANO: function(c) { return '<path d="M12 6L21.5 21H2.5Z" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.5 21L12 14L14.5 21" fill="'+c+'"/><circle cx="12" cy="6" r="2" fill="'+c+'"/><line x1="12" y1="3" x2="12" y2="4.2" stroke="#ff4400" stroke-width="3" stroke-linecap="round"/><line x1="10.2" y1="3.2" x2="11" y2="4.2" stroke="#ff8800" stroke-width="1.5" stroke-linecap="round"/><line x1="13.8" y1="3.2" x2="13" y2="4.2" stroke="#ff8800" stroke-width="1.5" stroke-linecap="round"/>'; },
+  DROUGHT: function(c) { return '<circle cx="12" cy="8" r="3.5" fill="'+c+'"/><line x1="12" y1="2" x2="12" y2="4.2" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="17.8" y1="4" x2="16.2" y2="5.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="20" y1="8" x2="17.8" y2="8" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="6.2" y1="4" x2="7.8" y2="5.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="4" y1="8" x2="6.2" y2="8" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="16" x2="22" y2="16" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><path d="M6 16L8 19L12 20.5L16 19L18 16" fill="none" stroke="'+c+'" stroke-width="1" stroke-linecap="round" opacity=".6"/>'; },
+  AQI:     function(c) { return '<path d="M7 17C4.8 17 3 15.2 3 13C3 11.2 4.2 9.6 5.9 9.1C6.5 7 8.5 5.5 11 5.5C14 5.5 16.5 8 16.5 11C18.5 11.5 20 13.2 20 15C20 16.1 19.1 17 18 17Z" fill="'+c+'"/><circle cx="8" cy="20" r="1" fill="'+c+'" opacity=".5"/><circle cx="12" cy="21" r="1" fill="'+c+'" opacity=".4"/><circle cx="16" cy="20" r="1" fill="'+c+'" opacity=".5"/>'; },
+  HEAT:    function(c) { return '<rect x="10.5" y="4" width="3" height="12" rx="1.5" fill="none" stroke="'+c+'" stroke-width="1.5"/><rect x="11.5" y="8" width="1" height="9" rx=".5" fill="'+c+'"/><circle cx="12" cy="19" r="3.5" fill="'+c+'"/><circle cx="12" cy="19" r="1.5" fill="white" opacity=".25"/>'; },
+  UV:      function(c) { return '<circle cx="12" cy="12" r="3.5" fill="'+c+'"/><line x1="12" y1="2.5" x2="12" y2="5.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="12" y1="18.5" x2="12" y2="21.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="2.5" y1="12" x2="5.5" y2="12" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="18.5" y1="12" x2="21.5" y2="12" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="5.3" y1="5.3" x2="7.5" y2="7.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="16.5" y1="16.5" x2="18.7" y2="18.7" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="18.7" y1="5.3" x2="16.5" y2="7.5" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="7.5" y1="16.5" x2="5.3" y2="18.7" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/>'; },
+  DUST:    function(c) { return '<circle cx="7" cy="9" r="2" fill="'+c+'"/><circle cx="17" cy="8.5" r="1.5" fill="'+c+'" opacity=".7"/><circle cx="12" cy="13.5" r="2.5" fill="'+c+'"/><circle cx="6.5" cy="16.5" r="1.5" fill="'+c+'" opacity=".6"/><circle cx="17.5" cy="16" r="2" fill="'+c+'"/><path d="M7 9C10 5.5 18 7 18 11.5C18 16.5 12.5 19.5 7 17C3.5 15.5 4 11 7 9Z" fill="none" stroke="'+c+'" stroke-width=".75" stroke-dasharray="2,2" opacity=".6"/>'; },
+  HEALTH:  function(c) { return '<rect x="10.5" y="4" width="3" height="16" rx="1.5" fill="'+c+'"/><rect x="4" y="10.5" width="16" height="3" rx="1.5" fill="'+c+'"/>'; },
+  SOLAR:   function(c) { return '<path d="M12 2L14 9.5L22 12L14 14.5L12 22L10 14.5L2 12L10 9.5Z" fill="'+c+'"/>'; },
+  GEOMAG:  function(c) { return '<path d="M4 4C7 2 17 2 20 4" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><path d="M3 9C6 6.5 18 6.5 21 9" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><path d="M3 15C6 17.5 18 17.5 21 15" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><path d="M4 20C7 22 17 22 20 20" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round"/><line x1="12" y1="2" x2="12" y2="22" stroke="'+c+'" stroke-width=".75" opacity=".35"/>'; },
+};
+
+/* ══ GLYPH MARKER FACTORY ═══════════════════════ */
+// size = pixel size of the rendered icon; pulse = animated ring for critical
+function mkGlyph(type, color, size, pulse) {
+  size = Math.max(14, Math.round(size || 18));
+  const half  = size / 2;
+  const pathFn = GLYPHS[type] || GLYPHS['SEISMIC'];
+  const ring   = pulse
+    ? '<circle cx="12" cy="12" r="11" fill="none" stroke="' + color + '" stroke-width="1" opacity=".6">'
+      + '<animate attributeName="r" from="11" to="20" dur="2.4s" repeatCount="indefinite"/>'
+      + '<animate attributeName="opacity" from=".6" to="0" dur="2.4s" repeatCount="indefinite"/>'
+      + '</circle>'
     : '';
   return L.divIcon({
     className: '',
-    html: `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      ${ring}
-      <circle cx="12" cy="12" r="${r}" fill="${color}" opacity=".9"/>
-      <circle cx="12" cy="12" r="${r + 1.5}" fill="none" stroke="${color}" stroke-width=".5" opacity=".3"/>
-    </svg>`,
-    iconSize: [24, 24], iconAnchor: [12, 12],
+    html: '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" overflow="visible" xmlns="http://www.w3.org/2000/svg">'
+      + ring + pathFn(color) + '</svg>',
+    iconSize:   [size, size],
+    iconAnchor: [half, half],
   });
 }
+
+/* Size helpers per category */
+function sizeForMag(mag)  { return Math.max(14, Math.min(30, Math.round(10 + mag * 2.6))); }
+function sizeForAQI(aqi)  { return aqi > 300 ? 28 : aqi > 200 ? 24 : aqi > 150 ? 20 : aqi > 100 ? 17 : aqi > 50 ? 15 : 14; }
+function sizeForWB(wb)    { return wb >= 35 ? 28 : wb >= 32 ? 24 : wb >= 28 ? 19 : 15; }
+function sizeForUV(uv)    { return uv >= 11 ? 26 : uv >= 8 ? 21 : uv >= 6 ? 17 : 14; }
+function sizeForDust(dv)  { return dv > 400 ? 26 : dv > 200 ? 21 : dv > 100 ? 17 : 14; }
+function sizeForSev(sev)  { return sev === 'critical' ? 28 : sev === 'warning' ? 22 : 16; }
+
 
 /* ══ POPUP FACTORY ══════════════════════════════ */
 function mkPopup(type, title, rows, mode) {
@@ -486,7 +514,7 @@ async function fetchEarthquakes() {
       const col = mag >= 6 ? '#ff2d2d' : mag >= 5 ? '#ffaa00' : mag >= 4 ? '#ffcc00' : '#88aa22';
       const sev = mag >= 6 ? 'critical' : mag >= 5 ? 'warning' : mag >= 4 ? 'advisory' : 'nominal';
 
-      const m = L.marker([lat, lon], { icon: mkMarker(col, mag * 2.8, mag >= 5) });
+      const m = L.marker([lat, lon], { icon: mkGlyph('SEISMIC', col, sizeForMag(mag), mag >= 5) });
       m.bindPopup(mkPopup('SEISMIC', p.place || 'Unknown location', [
         ['MAGNITUDE', 'M ' + mag.toFixed(1), col],
         ['DEPTH',     dep.toFixed(1) + ' km'],
@@ -566,7 +594,7 @@ async function fetchWeather() {
         const col = WB >= 35 ? '#ff1a1a' : WB >= 32 ? '#ff5500' : WB >= 28 ? '#ff9900' : '#cc7700';
         const sev = WB >= 35 ? 'critical' : WB >= 32 ? 'warning' : WB >= 28 ? 'advisory' : 'nominal';
         const lbl = WB >= 35 ? 'UNSURVIVABLE OUTDOORS' : WB >= 32 ? 'DANGEROUS' : WB >= 28 ? 'CAUTION' : 'MANAGEABLE';
-        const m = L.marker([c.lat + 0.1, c.lon], { icon: mkMarker(col, 7, WB >= 32) });
+        const m = L.marker([c.lat + 0.1, c.lon], { icon: mkGlyph('HEAT', col, sizeForWB(WB), WB >= 32) });
         m.bindPopup(mkPopup('HEAT', c.n + ' — Heat / Wet Bulb', [
           ['AIR TEMP',   T != null ? T.toFixed(1) + '°C' : '—'],
           ['FEELS LIKE', wc.apparent_temperature != null ? wc.apparent_temperature.toFixed(1) + '°C' : '—'],
@@ -587,7 +615,7 @@ async function fetchWeather() {
       if (UV != null && UV >= 3) {
         const col = UV >= 11 ? '#ff1a1a' : UV >= 8 ? '#ff6a00' : UV >= 6 ? '#ffcc00' : '#88cc00';
         const lbl = UV >= 11 ? 'EXTREME' : UV >= 8 ? 'VERY HIGH' : UV >= 6 ? 'HIGH' : 'MODERATE';
-        const m = L.marker([c.lat - 0.1, c.lon + 0.1], { icon: mkMarker(col, 6) });
+        const m = L.marker([c.lat - 0.1, c.lon + 0.1], { icon: mkGlyph('UV', col, sizeForUV(UV), UV >= 11) });
         m.bindPopup(mkPopup('UV', c.n + ' — UV Index', [
           ['UV INDEX',   UV.toFixed(1), col],
           ['CATEGORY',   lbl, col],
@@ -602,7 +630,7 @@ async function fetchWeather() {
       if (dv != null && dv > 50) {
         const col = dv > 400 ? '#c8601a' : dv > 150 ? '#d4842a' : '#c8a060';
         const lbl = dv > 400 ? 'DUST STORM' : dv > 150 ? 'HIGH DUST' : 'ELEVATED';
-        const m = L.marker([c.lat, c.lon - 0.12], { icon: mkMarker(col, 6, dv > 150) });
+        const m = L.marker([c.lat, c.lon - 0.12], { icon: mkGlyph('DUST', col, sizeForDust(dv), dv > 200) });
         m.bindPopup(mkPopup('DUST', c.n + ' — Dust / Particulates', [
           ['DUST/PM10',  dv.toFixed(0) + ' μg/m³', col],
           ['CONDITION',  lbl, col],
@@ -627,7 +655,7 @@ async function fetchWeather() {
           : aqi > 150 ? 'UNHEALTHY' : aqi > 100 ? 'USG-SENSITIVE'
           : aqi > 50  ? 'MODERATE'  : 'GOOD';
         const sev = aqi > 200 ? 'critical' : aqi > 150 ? 'warning' : aqi > 100 ? 'advisory' : 'nominal';
-        const m = L.marker([c.lat + 0.05, c.lon + 0.15], { icon: mkMarker(col, 8) });
+        const m = L.marker([c.lat + 0.05, c.lon + 0.15], { icon: mkGlyph('AQI', col, sizeForAQI(aqi), aqi > 200) });
         m.bindPopup(mkPopup('AQI', c.n, [
           ['US AQI',   '' + aqi, col],
           ['CATEGORY', lbl, col],
@@ -691,7 +719,8 @@ async function fetchFires() {
       if (conf === 'l') return; // skip low confidence detections
       const col  = conf === 'h' ? '#ff2200' : '#ff6600';
       const sev  = conf === 'h' ? 'warning' : 'advisory';
-      const m = L.marker([lat, lon], { icon: mkMarker(col, 5, conf === 'h') });
+      const fireSize = conf === 'h' ? Math.max(16, Math.min(28, Math.round(14 + (isNaN(frp) ? 0 : frp / 20)))) : 14;
+      const m = L.marker([lat, lon], { icon: mkGlyph('FIRE', col, fireSize, conf === 'h') });
       m.bindPopup(mkPopup('FIRE', 'Active Fire — NASA VIIRS', [
         ['CONFIDENCE',  conf === 'h' ? 'HIGH' : 'NOMINAL', col],
         ['FIRE POWER',  !isNaN(frp) ? frp.toFixed(1) + ' MW' : '—'],
@@ -848,7 +877,7 @@ async function fetchDisasters() {
       const col  = TYPE_COLOR[type] || '#aaa';
       const name = (p.eventname || type) + (p.country ? ' — ' + p.country : '');
 
-      const m = L.marker([lat, lon], { icon: mkMarker(col, 11, sev !== 'advisory') });
+      const m = L.marker([lat, lon], { icon: mkGlyph(type, col, sizeForSev(sev), sev !== 'advisory') });
       m.bindPopup(mkPopup(type, name, [
         ['ALERT LEVEL', al.toUpperCase(), SEV_COLOR[sev]],
         ['COUNTRY',     p.country || '—'],
@@ -896,7 +925,7 @@ async function fetchHealth() {
   ENDEMIC.forEach(function(e) {
     if (e.mo !== null && !e.mo.includes(mo)) return;
     const status = e.mo === null ? 'YEAR-ROUND RISK' : 'SEASONAL PEAK';
-    const m = L.marker([e.lat, e.lon], { icon: mkMarker('#00cc66', 6) });
+    const m = L.marker([e.lat, e.lon], { icon: mkGlyph('HEALTH', '#00cc66', 16) });
     m.bindPopup(mkPopup('HEALTH', e.n, [
       ['DISEASE', e.d],
       ['STATUS',  status],
