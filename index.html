@@ -298,7 +298,7 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
 /* ══ CONFIG — replace keys here when you have them ══ */
 const CFG = {
   WAQI_KEY: 'demo',      // free: waqi.info/api
-  NASA_KEY: 'DEMO_KEY',  // free: api.nasa.gov
+  NASA_KEY: '16da9HrhWdHggFpSAkNpZBR4MP7nomRHXrmUtswJ',  // free: api.nasa.gov
   // FIRMS_KEY: 'xxx',   // free: firms.modaps.eosdis.nasa.gov/api
 };
 
@@ -766,7 +766,11 @@ async function fetchSpaceWeather() {
       const val = parseFloat(data[i][1]);
       if (!isNaN(val)) { kp = val; break; }
     }
-    if (kp === null) throw new Error('No valid Kp reading found');
+    if (kp === null) {
+      document.getElementById('sw-kp').textContent = '--';
+      document.getElementById('sw-kp-desc').textContent = 'NOAA DATA GAP — awaiting next reading';
+      feedSt('space', 'ok', 'PARTIAL');
+    } else {
     const kpEl = document.getElementById('sw-kp');
     kpEl.textContent = kp.toFixed(1);
     kpEl.style.color = kp >= 7 ? '#ff2d2d' : kp >= 5 ? '#ffaa00' : '#00d4ff';
@@ -781,6 +785,7 @@ async function fetchSpaceWeather() {
       detail: 'Kp=' + kp.toFixed(1) + ' — ' + desc,
       severity: kp >= 7 ? 'critical' : 'warning', time: 'Current', lat: null, lon: null,
     });
+    }
   } catch (e) {
     console.error('[SWPC]', e.message);
     feedSt('space', 'err', 'OFFLINE');
@@ -869,54 +874,11 @@ async function fetchDisasters() {
   }
 }
 
-/* 6 — HEALTH (WHO RSS + endemic risk layers) */
+/* 6 — HEALTH (static endemic risk layers — WHO RSS removed, feed changed) */
 async function fetchHealth() {
   feedSt('who', 'load', 'CONNECTING');
-  progress(82, 'SCANNING EPIDEMIOLOGICAL FEEDS...');
+  progress(82, 'LOADING ENDEMIC RISK ZONES...');
   let count = 0;
-
-  // WHO news RSS via rss2json
-  try {
-    const rss = 'https://www.who.int/rss-feeds/news-english.xml';
-    const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=30';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error('rss2json: ' + (data.message || 'error'));
-
-    const REGION = ['india','bangladesh','pakistan','nepal','sri lanka','myanmar','south asia','southeast asia'];
-    const DCOORDS = {
-      nipah: [10.52,76.21], dengue: [12.97,77.59], cholera: [22.57,88.37],
-      malaria: [20.30,85.83], leptospirosis: [19.07,72.88],
-      encephalitis: [26.85,80.95], plague: [26.28,73.02], mpox: [19.07,72.88],
-    };
-
-    (data.items || []).forEach(function(item) {
-      const full = ((item.title || '') + ' ' + (item.description || '')).toLowerCase();
-      if (!REGION.some(function(r) { return full.includes(r); })) return;
-      let coords = null;
-      for (const dis in DCOORDS) {
-        if (full.includes(dis)) { coords = DCOORDS[dis]; break; }
-      }
-      if (coords) {
-        const m = L.marker(coords, { icon: mkMarker('#00e87a', 9, true) });
-        m.bindPopup(mkPopup('HEALTH', item.title || 'WHO Alert', [
-          ['SOURCE',    'WHO Health Alert'],
-          ['PUBLISHED', timeAgo(item.pubDate)],
-        ], 'ACUTE'), { maxWidth: 260 });
-        LAYERS.health.g.addLayer(m);
-      }
-      pushAlert({
-        type: 'HEALTH', location: (item.title || 'WHO').slice(0, 50),
-        detail: 'WHO Health Alert — South Asia',
-        severity: 'advisory', time: timeAgo(item.pubDate),
-        lat: coords ? coords[0] : null, lon: coords ? coords[1] : null,
-      });
-      count++;
-    });
-  } catch (e) {
-    console.error('[WHO]', e.message);
-  }
 
   // Endemic / seasonal risk markers (always shown — year-round or seasonal)
   const mo = new Date().getMonth() + 1;
