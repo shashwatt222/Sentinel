@@ -297,9 +297,9 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
 
 /* ══ CONFIG — replace keys here when you have them ══ */
 const CFG = {
-  WAQI_KEY: 'demo',      // free: waqi.info/api
-  NASA_KEY: '16da9HrhWdHggFpSAkNpZBR4MP7nomRHXrmUtswJ',  // free: api.nasa.gov
-  FIRMS_KEY: '22f001bc88906c0f9fbf0dc4a23f8a07',   // free: firms.modaps.eosdis.nasa.gov/api
+  WAQI_KEY:  'demo',
+  NASA_KEY:  '16da9HrhWdHggFpSAkNpZBR4MP7nomRHXrmUtswJ',
+  FIRMS_KEY: '22f001bc88906c0f9fbf0dc4a23f8a07',
 };
 
 /* ══ MAP ════════════════════════════════════════ */
@@ -544,23 +544,103 @@ async function fetchWeather() {
   progress(36, 'READING ATMOSPHERIC SENSORS...');
 
   const CITIES = [
+    // ── NORTH & NCR ───────────────────────────────
     { n:'Delhi',              lat:28.65, lon:77.23 },
-    { n:'Mumbai',             lat:19.07, lon:72.88 },
-    { n:'Kolkata',            lat:22.57, lon:88.37 },
-    { n:'Chennai',            lat:13.08, lon:80.27 },
-    { n:'Hyderabad',          lat:17.39, lon:78.49 },
-    { n:'Ahmedabad',          lat:23.02, lon:72.57 },
+    { n:'Gurugram',           lat:28.46, lon:77.03 },
+    { n:'Amritsar',           lat:31.63, lon:74.87 },
+    { n:'Ludhiana',           lat:30.90, lon:75.85 },
+    { n:'Chandigarh',         lat:30.74, lon:76.79 },
+    { n:'Srinagar',           lat:34.08, lon:74.80 },
+    { n:'Leh',                lat:34.15, lon:77.58 },
+    { n:'Shimla',             lat:31.10, lon:77.17 },
+    { n:'Dharamsala',         lat:32.22, lon:76.32 },
+    { n:'Dehradun',           lat:30.32, lon:78.03 },
+    // ── UTTAR PRADESH ─────────────────────────────
+    { n:'Lucknow',            lat:26.85, lon:80.95 },
+    { n:'Varanasi',           lat:25.32, lon:83.00 },
+    { n:'Agra',               lat:27.18, lon:78.01 },
+    { n:'Kanpur',             lat:26.45, lon:80.35 },
+    { n:'Prayagraj',          lat:25.43, lon:81.84 },
+    { n:'Meerut',             lat:28.98, lon:77.71 },
+    // ── RAJASTHAN ─────────────────────────────────
     { n:'Jaipur',             lat:26.91, lon:75.79 },
-    { n:'Bhubaneswar',        lat:20.30, lon:85.83 },
     { n:'Jodhpur',            lat:26.29, lon:73.02 },
+    { n:'Udaipur',            lat:24.58, lon:73.68 },
+    { n:'Bikaner',            lat:28.02, lon:73.31 },
+    { n:'Kota',               lat:25.18, lon:75.83 },
+    // ── GUJARAT ───────────────────────────────────
+    { n:'Ahmedabad',          lat:23.02, lon:72.57 },
+    { n:'Surat',              lat:21.17, lon:72.83 },
+    { n:'Vadodara',           lat:22.31, lon:73.19 },
+    { n:'Rajkot',             lat:22.30, lon:70.80 },
+    // ── MAHARASHTRA ───────────────────────────────
+    { n:'Mumbai',             lat:19.07, lon:72.88 },
+    { n:'Pune',               lat:18.52, lon:73.86 },
     { n:'Nagpur',             lat:21.15, lon:79.09 },
+    { n:'Nashik',             lat:19.99, lon:73.79 },
+    { n:'Aurangabad',         lat:19.88, lon:75.34 },
+    // ── MADHYA PRADESH ────────────────────────────
+    { n:'Bhopal',             lat:23.26, lon:77.41 },
+    { n:'Indore',             lat:22.72, lon:75.86 },
+    { n:'Gwalior',            lat:26.22, lon:78.18 },
+    { n:'Jabalpur',           lat:23.18, lon:79.95 },
+    // ── CHHATTISGARH ──────────────────────────────
+    { n:'Raipur',             lat:21.25, lon:81.63 },
+    { n:'Bilaspur',           lat:22.09, lon:82.15 },
+    // ── JHARKHAND ─────────────────────────────────
+    { n:'Ranchi',             lat:23.35, lon:85.33 },
+    { n:'Jamshedpur',         lat:22.80, lon:86.19 },
+    // ── BIHAR ─────────────────────────────────────
     { n:'Patna',              lat:25.59, lon:85.14 },
+    { n:'Gaya',               lat:24.80, lon:85.00 },
+    // ── WEST BENGAL ───────────────────────────────
+    { n:'Kolkata',            lat:22.57, lon:88.37 },
+    { n:'Siliguri',           lat:26.72, lon:88.43 },
+    // ── ODISHA ────────────────────────────────────
+    { n:'Bhubaneswar',        lat:20.30, lon:85.83 },
+    { n:'Sambalpur',          lat:21.47, lon:83.97 },
+    // ── NORTHEAST ─────────────────────────────────
     { n:'Guwahati',           lat:26.18, lon:91.75 },
+    { n:'Dibrugarh',          lat:27.48, lon:94.91 },
+    { n:'Shillong',           lat:25.57, lon:91.88 },
+    { n:'Imphal',             lat:24.82, lon:93.94 },
+    { n:'Agartala',           lat:23.84, lon:91.28 },
+    { n:'Aizawl',             lat:23.73, lon:92.72 },
+    { n:'Kohima',             lat:25.67, lon:94.11 },
+    { n:'Itanagar',           lat:27.08, lon:93.60 },
+    { n:'Gangtok',            lat:27.33, lon:88.62 },
+    // ── ANDHRA + TELANGANA ────────────────────────
+    { n:'Hyderabad',          lat:17.39, lon:78.49 },
+    { n:'Visakhapatnam',      lat:17.69, lon:83.22 },
+    { n:'Vijayawada',         lat:16.51, lon:80.62 },
+    { n:'Tirupati',           lat:13.63, lon:79.42 },
+    // ── KARNATAKA ─────────────────────────────────
     { n:'Bengaluru',          lat:12.97, lon:77.59 },
+    { n:'Mangaluru',          lat:12.87, lon:74.88 },
+    { n:'Mysuru',             lat:12.30, lon:76.65 },
+    { n:'Hubli',              lat:15.36, lon:75.12 },
+    // ── TAMIL NADU ────────────────────────────────
+    { n:'Chennai',            lat:13.08, lon:80.27 },
+    { n:'Coimbatore',         lat:11.02, lon:76.97 },
+    { n:'Madurai',            lat: 9.93, lon:78.12 },
+    { n:'Tiruchirapalli',     lat:10.79, lon:78.70 },
+    // ── KERALA ────────────────────────────────────
     { n:'Thiruvananthapuram', lat: 8.50, lon:76.95 },
+    { n:'Kochi',              lat: 9.93, lon:76.26 },
+    { n:'Kozhikode',          lat:11.25, lon:75.78 },
+    // ── GOA + UTs ─────────────────────────────────
+    { n:'Panaji',             lat:15.49, lon:73.83 },
+    { n:'Port Blair',         lat:11.67, lon:92.75 },
+    { n:'Puducherry',         lat:11.94, lon:79.83 },
+    // ── NEIGHBOURS ────────────────────────────────
     { n:'Karachi',            lat:24.86, lon:67.01 },
+    { n:'Lahore',             lat:31.55, lon:74.34 },
+    { n:'Islamabad',          lat:33.72, lon:73.06 },
     { n:'Dhaka',              lat:23.81, lon:90.41 },
+    { n:'Chittagong',         lat:22.34, lon:91.82 },
     { n:'Kathmandu',          lat:27.71, lon:85.31 },
+    { n:'Colombo',            lat: 6.93, lon:79.85 },
+    { n:'Yangon',             lat:16.87, lon:96.19 },
   ];
 
   let hc = 0, uc = 0, dc = 0, ac = 0, ok = 0;
