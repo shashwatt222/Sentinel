@@ -6,6 +6,7 @@
 <title>SENTINEL — India Threat Monitor</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <style>
 :root {
   --bg:    #050c12;
@@ -131,7 +132,20 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
   animation:scroll-ticker 70s linear infinite}
 @keyframes scroll-ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
 
-/* LEAFLET OVERRIDES */
+/* ZOOM SLIDER */
+#zoom-ctrl{position:fixed;right:14px;top:50%;transform:translateY(-50%);z-index:400;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--panel);border:1px solid var(--b2);backdrop-filter:blur(14px);
+  padding:10px 7px;border-radius:3px}
+.zoom-lbl{font-size:10px;color:var(--t2);cursor:pointer;user-select:none;line-height:1}
+#zoom-sl{writing-mode:vertical-lr;direction:rtl;-webkit-appearance:slider-vertical;
+  width:20px;height:140px;cursor:pointer;accent-color:var(--cyan);background:transparent}
+
+/* OVERLAY TOGGLES (heat / UV — mutually exclusive) */
+.overlay-toggle{border-left:2px solid transparent;padding-left:10px}
+.overlay-toggle.overlay-active{border-left-color:var(--cyan);background:rgba(0,212,255,.05)}
+.overlay-toggle.overlay-active .llabel{color:var(--cyan)}
+
 .leaflet-control-attribution{display:none !important}
 .leaflet-control-zoom{border:1px solid var(--b2) !important}
 .leaflet-control-zoom a{background:var(--panel) !important;color:var(--t1) !important;border-bottom:1px solid var(--b1) !important}
@@ -169,6 +183,7 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
     <div class="ldf"><span class="ldf-name">SPACE WEATHER (NASA/NOAA)</span><span class="ldf-st load" id="fs-space">CONNECTING</span></div>
     <div class="ldf"><span class="ldf-name">DISASTERS (GDACS)</span><span class="ldf-st load" id="fs-gdacs">CONNECTING</span></div>
     <div class="ldf"><span class="ldf-name">HEALTH (WHO)</span><span class="ldf-st load" id="fs-who">CONNECTING</span></div>
+    <div class="ldf"><span class="ldf-name">HEATMAP GRID (OPEN-METEO)</span><span class="ldf-st load" id="fs-grid">CONNECTING</span></div>
   </div>
 </div>
 
@@ -203,6 +218,13 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
 
 <div id="map"></div>
 
+<!-- ZOOM SLIDER -->
+<div id="zoom-ctrl">
+  <span class="zoom-lbl" onclick="map.zoomIn()">+</span>
+  <input type="range" id="zoom-sl" min="5" max="14" step="0.5" value="5">
+  <span class="zoom-lbl" onclick="map.zoomOut()">−</span>
+</div>
+
 <!-- LEFT PANEL -->
 <aside id="left-panel">
   <div id="left-content">
@@ -229,22 +251,22 @@ body::after{content:'';position:fixed;inset:0;z-index:2000;pointer-events:none;
     </div>
 
     <div class="pnl-sec" style="margin-top:6px">◆ ENVIRONMENTAL</div>
-    <div class="ltoggle off" data-key="aqi" data-mode="chronic">
+    <div class="ltoggle" data-key="aqi" data-mode="chronic">
       <div class="ldot" style="background:#cc44ff"></div>
       <span class="llabel">AIR QUALITY</span>
       <span class="lcount" id="ct-aqi">—</span>
     </div>
-    <div class="ltoggle off" data-key="heat" data-mode="chronic">
+    <div class="ltoggle overlay-toggle" data-overlay="heat" data-mode="chronic">
       <div class="ldot" style="background:#ff6633"></div>
       <span class="llabel">HEAT / WET BULB</span>
       <span class="lcount" id="ct-heat">—</span>
     </div>
-    <div class="ltoggle off" data-key="uv" data-mode="forecast">
-      <div class="ldot" style="background:#ffee00"></div>
+    <div class="ltoggle overlay-toggle" data-overlay="uv" data-mode="forecast">
+      <div class="ldot" style="background:#BAF9F5"></div>
       <span class="llabel">UV INDEX</span>
       <span class="lcount" id="ct-uv">—</span>
     </div>
-    <div class="ltoggle off" data-key="dust" data-mode="forecast">
+    <div class="ltoggle" data-key="dust" data-mode="forecast">
       <div class="ldot" style="background:#c8a060"></div>
       <span class="llabel">DUST / SANDSTORM</span>
       <span class="lcount" id="ct-dust">—</span>
@@ -338,10 +360,10 @@ const LAYERS = {
   disaster:   { g: L.layerGroup(), critical: true,  mode: 'acute' },
   health:     { g: L.layerGroup(), critical: true,  mode: 'acute' },
   fire:       { g: L.layerGroup(), critical: false, mode: 'acute' },
-  aqi:        { g: L.layerGroup(), critical: false, mode: 'chronic' },
+  aqi:        { g: L.layerGroup(), critical: true,  mode: 'chronic' },
   heat:       { g: L.layerGroup(), critical: false, mode: 'chronic' },
   uv:         { g: L.layerGroup(), critical: false, mode: 'forecast' },
-  dust:       { g: L.layerGroup(), critical: false, mode: 'forecast' },
+  dust:       { g: L.layerGroup(), critical: true,  mode: 'forecast' },
   space:      { g: L.layerGroup(), critical: false, mode: 'chronic' },
 };
 Object.values(LAYERS).forEach(l => { if (l.critical) l.g.addTo(map); });
@@ -398,6 +420,23 @@ function wetBulb(T, RH) {
     - Math.atan(RH - 1.676331)
     + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH)
     - 4.686035;
+}
+
+/* ══ HEATMAP STATE ══════════════════════════════ */
+let HEAT_HL      = null;   // L.heatLayer for wet bulb
+let UV_HL        = null;   // L.heatLayer for UV index
+let activeOverlay = null;  // 'heat' | 'uv' | null
+
+/* ══ GRID GENERATOR ═════════════════════════════ */
+// 2.5° spacing across South Asia → ~208 points
+function generateGrid() {
+  var pts = [];
+  for (var lat = 7.5; lat <= 37.5; lat += 2.5) {
+    for (var lon = 62.5; lon <= 100; lon += 2.5) {
+      pts.push({ lat: Math.round(lat * 10) / 10, lon: Math.round(lon * 10) / 10 });
+    }
+  }
+  return pts;
 }
 
 /* ══ GLYPH LIBRARY ══════════════════════════════ */
@@ -765,6 +804,60 @@ async function fetchWeather() {
   feedSt('aqi', ac > 0 ? 'ok' : 'err', ac > 0 ? 'OK · ' + ac : 'NO DATA');
 }
 
+/* HEATMAP GRID — feeds HEAT and UV heatmap layers */
+async function fetchHeatmapGrid() {
+  feedSt('grid', 'load', 'CONNECTING');
+  const grid    = generateGrid();
+  const heatPts = [];
+  const uvPts   = [];
+
+  await Promise.allSettled(grid.map(async function(p) {
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast'
+        + '?latitude='  + p.lat + '&longitude=' + p.lon
+        + '&current=temperature_2m,relative_humidity_2m,uv_index'
+        + '&timezone=auto&forecast_days=1';
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const d  = await res.json();
+      const c  = d.current || {};
+      const T  = c.temperature_2m, RH = c.relative_humidity_2m;
+      const UV = c.uv_index;
+      if (T != null && RH != null) {
+        const wb   = wetBulb(T, RH);
+        // Normalise: 18°C = 0 (comfortable), 38°C = 1 (extreme)
+        const norm = Math.max(0, Math.min(1, (wb - 18) / 20));
+        heatPts.push([p.lat, p.lon, norm]);
+      }
+      if (UV != null) {
+        uvPts.push([p.lat, p.lon, Math.max(0, Math.min(1, UV / 12))]);
+      }
+    } catch (e) {}
+  }));
+
+  // Build heatmap layers
+  if (HEAT_HL) { try { map.removeLayer(HEAT_HL); } catch(e) {} }
+  if (UV_HL)   { try { map.removeLayer(UV_HL);   } catch(e) {} }
+
+  HEAT_HL = L.heatLayer(heatPts, {
+    radius: 60, blur: 50, maxZoom: 9,
+    gradient: { 0.0:'#1a6b35', 0.25:'#ffe600', 0.55:'#ff6600', 0.78:'#ff2d2d', 1.0:'#7a0000' },
+    minOpacity: 0.3,
+  });
+  UV_HL = L.heatLayer(uvPts, {
+    radius: 60, blur: 50, maxZoom: 9,
+    gradient: { 0.0:'#1F51FF', 0.5:'#BAF9F5', 1.0:'#DC00FE' },
+    minOpacity: 0.3,
+  });
+
+  // Restore active overlay if one was selected
+  if (activeOverlay === 'heat') { map.addLayer(HEAT_HL); map.addLayer(LAYERS.heat.g); }
+  if (activeOverlay === 'uv')   { map.addLayer(UV_HL);   map.addLayer(LAYERS.uv.g);   }
+
+  feedSt('grid', heatPts.length > 0 ? 'ok' : 'err',
+    heatPts.length > 0 ? 'OK · ' + heatPts.length + ' pts' : 'OFFLINE');
+}
+
 /* FIRES — NASA FIRMS VIIRS (requires free MAP_KEY) */
 async function fetchFires() {
   if (!CFG.FIRMS_KEY) { feedSt('fire', 'err', 'NO KEY'); return; }
@@ -1019,9 +1112,44 @@ async function fetchHealth() {
   feedSt('who', 'ok', 'OK · ' + count);
 }
 
-/* ══════════════════════════════════════════════
-   UI LOGIC
-══════════════════════════════════════════════ */
+/* ══ OVERLAY TOGGLE (heat / UV — mutually exclusive) ══ */
+function setOverlay(type) {
+  // Remove whatever is currently showing
+  if (HEAT_HL) { try { map.removeLayer(HEAT_HL); } catch(e) {} }
+  if (UV_HL)   { try { map.removeLayer(UV_HL);   } catch(e) {} }
+  try { map.removeLayer(LAYERS.heat.g); } catch(e) {}
+  try { map.removeLayer(LAYERS.uv.g);   } catch(e) {}
+
+  // Toggle off if same type clicked again
+  activeOverlay = (activeOverlay === type) ? null : type;
+
+  if (activeOverlay === 'heat') {
+    if (HEAT_HL) map.addLayer(HEAT_HL);
+    map.addLayer(LAYERS.heat.g);
+  } else if (activeOverlay === 'uv') {
+    if (UV_HL) map.addLayer(UV_HL);
+    map.addLayer(LAYERS.uv.g);
+  }
+
+  // Update visual state of overlay toggles
+  document.querySelectorAll('.overlay-toggle').forEach(function(el) {
+    el.classList.toggle('overlay-active', el.dataset.overlay === activeOverlay);
+  });
+}
+
+document.querySelectorAll('.overlay-toggle').forEach(function(el) {
+  el.addEventListener('click', function() { setOverlay(el.dataset.overlay); });
+});
+
+/* ══ ZOOM SLIDER ════════════════════════════════ */
+var zoomSl = document.getElementById('zoom-sl');
+zoomSl.value = map.getZoom();
+zoomSl.addEventListener('input', function() { map.setZoom(parseFloat(zoomSl.value)); });
+map.on('zoom', function() { zoomSl.value = map.getZoom(); });
+// Hide default zoom control since we have the slider
+document.querySelector('.leaflet-control-zoom').style.display = 'none';
+
+
 
 // Layer toggles
 document.querySelectorAll('.ltoggle:not(.no-key)').forEach(function(el) {
@@ -1084,12 +1212,13 @@ function refreshTicker() {
 
 /* ══ MAIN INIT ══════════════════════════════════ */
 async function init() {
-  try { await fetchEarthquakes(); } catch(e) { console.error(e); }
-  try { await fetchWeather();     } catch(e) { console.error(e); }
-  try { await fetchFires();       } catch(e) { console.error(e); }
-  try { await fetchSpaceWeather();} catch(e) { console.error(e); }
-  try { await fetchDisasters();   } catch(e) { console.error(e); }
-  try { await fetchHealth();      } catch(e) { console.error(e); }
+  try { await fetchEarthquakes();  } catch(e) { console.error(e); }
+  try { await fetchWeather();      } catch(e) { console.error(e); }
+  try { await fetchHeatmapGrid();  } catch(e) { console.error(e); }
+  try { await fetchFires();        } catch(e) { console.error(e); }
+  try { await fetchSpaceWeather(); } catch(e) { console.error(e); }
+  try { await fetchDisasters();    } catch(e) { console.error(e); }
+  try { await fetchHealth();       } catch(e) { console.error(e); }
 
   progress(100, 'ALL FEEDS LOADED');
   refreshTicker();
@@ -1098,12 +1227,13 @@ async function init() {
   setInterval(async function() {
     Object.values(LAYERS).forEach(function(l) { l.g.clearLayers(); });
     alerts.length = 0;
-    try { await fetchEarthquakes(); } catch(e) {}
-    try { await fetchWeather();     } catch(e) {}
-    try { await fetchFires();       } catch(e) {}
-    try { await fetchSpaceWeather();} catch(e) {}
-    try { await fetchDisasters();   } catch(e) {}
-    try { await fetchHealth();      } catch(e) {}
+    try { await fetchEarthquakes();  } catch(e) {}
+    try { await fetchWeather();      } catch(e) {}
+    try { await fetchHeatmapGrid();  } catch(e) {}
+    try { await fetchFires();        } catch(e) {}
+    try { await fetchSpaceWeather(); } catch(e) {}
+    try { await fetchDisasters();    } catch(e) {}
+    try { await fetchHealth();       } catch(e) {}
     refreshTicker();
   }, 5 * 60 * 1000);
 
